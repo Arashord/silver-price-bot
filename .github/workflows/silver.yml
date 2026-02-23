@@ -10,14 +10,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+
       - name: Install dependencies
         run: pip install requests
+
       - name: Run bot
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python silver.py
+
+      - name: Save price to repo
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add last_price.json
+          git diff --staged --quiet || git commit -m "Update price cache"
+          git push
