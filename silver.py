@@ -1,31 +1,42 @@
-import requests, os, time
+import requests
+import os
+import json
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHAT_ID = os.environ.get("CHAT_ID")
+BOT_TOKEN = os.environ['BOT_TOKEN']
+CHAT_ID = os.environ['CHAT_ID']
+PRICE_FILE = 'last_price.json'
+API_URL = 'https://webapi.charisma.ir/api/Plan/plan-calculator-info-by-id?planId=04689a46-3eff-45d4-a070-f83f7d4d20d8'
 
-def get_silver_price():
-    url = "https://webapi.charisma.ir/api/Plan/plan-calculator-info-by-id?planId=04689a46-3eff-45d4-a070-f83f7d4d20d8"
-    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
-    return round(r.json()['lastPrice'], 0)
+def get_price():
+    r = requests.get(API_URL, timeout=10)
+    data = r.json()
+    return data['lastPrice']
 
-def send_to_telegram(price, old_price=None):
-    if old_price:
-        change = price - old_price
-        emoji = "📈" if change > 0 else "📉"
-        msg = f"{emoji} قیمت نقره تغییر کرد!\nقبلی: {old_price:,.0f} تومان\nجدید: {price:,.0f} تومان\nتفاوت: {change:+,.0f} تومان"
-    else:
-        msg = f"💰 قیمت نقره: {price:,.0f} تومان"
-    requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                  json={"chat_id": CHAT_ID, "text": msg})
+def send_telegram(msg):
+    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
+    requests.post(url, json={'chat_id': CHAT_ID, 'text': msg, 'parse_mode': 'HTML'})
 
-last_price = None
-for i in range(5):
-    try:
-        price = get_silver_price()
-        if price != last_price:
-            send_to_telegram(price, last_price)
-            last_price = price
-    except Exception as e:
-        print(f"خطا: {e}")
-    if i < 4:
-        time.sleep(60)
+def load_last_price():
+    if os.path.exists(PRICE_FILE):
+        with open(PRICE_FILE) as f:
+            return json.load(f)['price']
+    return None
+
+def save_price(price):
+    with open(PRICE_FILE, 'w') as f:
+        json.dump({'price': price}, f)
+
+current = get_price()
+last = load_last_price()
+
+if last is None:
+    save_price(current)
+    send_telegram(f'🚀 ربات نقره فعال شد!\n💰 قیمت فعلی: <b>{current:,}</b> تومان')
+elif current != last:
+    diff = current - last
+    emoji = '📈' if diff > 0 else '📉'
+    msg = f'{emoji} تغییر قیمت نقره\n\nقبلی: {last:,}\nجدید: <b>{current:,}</b>\nتفاوت: {diff:+,} تومان'
+    send_telegram(msg)
+    save_price(current)
+else:
+    print(f'No change: {current}')
